@@ -56,20 +56,19 @@ jobs:
       env:
         SSHPASS: ${{ secrets.VPS_PASSWORD }}
       run: |
-        # 1. Buat Command SSH agar tidak perlu ketik ulang
-        # StrictHostKeyChecking=no -> Agar tidak ditanya "Are you sure?"
+        # 1. Buat Command SSH
         SSH_CMD="sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@${{ secrets.HOST }}"
 
-        # 2. Test Koneksi (Wajib)
-        echo "Testing connection..."
-        $SSH_CMD "echo '✅ Berhasil masuk ke VPS!'"
+        # 2. Test Koneksi & BUAT FOLDER DULU (Penting!)
+        echo "Testing connection & Creating folder..."
+        $SSH_CMD "mkdir -p ~/app && echo '✅ Folder ~/app berhasil dibuat!'"
 
-        # 3. Copy file docker-compose.yml ke server
+        # 3. Copy file docker-compose.yml ke server (Sekarang pasti bisa)
         echo "Uploading docker-compose..."
         sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null docker-compose.yml root@${{ secrets.HOST }}:~/app/docker-compose.yml
 
-        # 4. Eksekusi Deploy di Server
-        echo "Executing remote commands..."
+        # 4. Eksekusi Deploy
+        echo "Executing remote deployment..."
         $SSH_CMD "
           # Install Docker jika belum ada
           if ! command -v docker &> /dev/null; then
@@ -77,11 +76,9 @@ jobs:
               sh get-docker.sh
           fi
 
-          # Masuk folder
-          mkdir -p ~/app
           cd ~/app
 
-          # Login Docker (Optional, jaga-jaga)
+          # Login Docker
           echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
 
           # Set Environment Variable
@@ -95,5 +92,5 @@ jobs:
           docker compose down || true
           docker compose up -d
           
-          echo '✅ Deployment Finished!'
+          echo '✅ Deployment Finished! Website is Live!'
         "
