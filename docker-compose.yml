@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # Service 1: Frontend
+  frontend:
+    build: ./frontend
+    image: ${DOCKER_USERNAME}/poros-frontend:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - poros-net
+
+  # Service 2: Backend
+  backend:
+    build: ./backend
+    image: ${DOCKER_USERNAME}/poros-backend:latest
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+    networks:
+      - poros-net
+
+  # Service 3: Database (Redis)
+  redis:
+    image: redis:alpine
+    networks:
+      - poros-net
+    volumes:
+      - redis_data:/data
+
+networks:
+  poros-net:
+    driver: bridge
+
+volumes:
+  redis_data:
