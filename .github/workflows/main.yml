@@ -49,37 +49,51 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    # STAGE 4: Deploy ke VPS
-    - name: Deploy to VPS
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USERNAME }}
-        password: ${{ secrets.VPS_PASSWORD }}
-        # key: ${{ secrets.KEY }}
-        port: 22
-        script: |
+    - name: Install SSHPass
+      run: sudo apt-get install -y sshpass
+
+    - name: Deploy to VPS via SSHPass
+      env:
+        SSHPASS: ${{ secrets.VPS_PASSWORD }}
+      run: |
+        # 1. Buat Command SSH agar tidak perlu ketik ulang
+        # StrictHostKeyChecking=no -> Agar tidak ditanya "Are you sure?"
+        SSH_CMD="sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@${{ secrets.HOST }}"
+
+        # 2. Test Koneksi (Wajib)
+        echo "Testing connection..."
+        $SSH_CMD "echo '✅ Berhasil masuk ke VPS!'"
+
+        # 3. Copy file docker-compose.yml ke server
+        echo "Uploading docker-compose..."
+        sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null docker-compose.yml root@${{ secrets.HOST }}:~/app/docker-compose.yml
+
+        # 4. Eksekusi Deploy di Server
+        echo "Executing remote commands..."
+        $SSH_CMD "
           # Install Docker jika belum ada
           if ! command -v docker &> /dev/null; then
               curl -fsSL https://get.docker.com -o get-docker.sh
               sh get-docker.sh
           fi
 
-          # Setup folder
+          # Masuk folder
           mkdir -p ~/app
           cd ~/app
 
-          # Login Docker (Opsional, tapi bagus)
+          # Login Docker (Optional, jaga-jaga)
           echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
 
-          # Pull manual variable
+          # Set Environment Variable
           export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
-          
-          # Matikan container lama
-          docker compose down || true
-          
-          # Tarik image baru
+
+          # Restart Container
+          echo '⬇️ Pulling images...'
           docker compose pull
           
-          # Jalankan
+          echo '🚀 Restarting services...'
+          docker compose down || true
           docker compose up -d
+          
+          echo '✅ Deployment Finished!'
+        "
