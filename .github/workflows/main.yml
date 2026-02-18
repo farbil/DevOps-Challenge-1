@@ -1,0 +1,80 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-test-push:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    # STAGE 1: Test
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    - name: Run Tests
+      run: |
+        pip install flask redis pytest
+        cd backend
+        pytest
+
+    # STAGE 2: Login Docker Hub
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    # STAGE 3: Build & Push
+    - name: Build and Push Frontend
+      uses: docker/build-push-action@v4
+      with:
+        context: ./frontend
+        push: true
+        tags: ${{ secrets.DOCKER_USERNAME }}/poros-frontend:latest
+    
+    - name: Build and Push Backend
+      uses: docker/build-push-action@v4
+      with:
+        context: ./backend
+        push: true
+        tags: ${{ secrets.DOCKER_USERNAME }}/poros-backend:latest
+
+  deploy:
+    needs: build-test-push
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    # STAGE 4: Deploy ke VPS
+    - name: Deploy to VPS
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.KEY }}
+        script: |
+          # Install Docker jika belum ada
+          if ! command -v docker &> /dev/null; then
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sh get-docker.sh
+          fi
+
+          # Setup folder
+          mkdir -p ~/app
+          cd ~/app
+
+          # Pull manual
+          export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+          
+          # Matikan container lama
+          docker compose down || true
+          
+          # Tarik image baru
+          docker compose pull
+          
+          # Jalankan
+          docker compose up -d
